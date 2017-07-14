@@ -1,0 +1,9 @@
+[package]
+name = "mso_to_text"
+version = "0.1.0"
+authors = ["My name <you@example.com>"]
+
+[dependencies]
+zip = "0.2"
+xml-rs = "0.6.0"
+argparse = "0.2.1"
