@@ -77,7 +77,9 @@ mod sax_docx {
                 while let Some(event) = source.next() {
                     match event.unwrap() {
                         XmlEvent::StartElement { ref name, ref attributes, .. } => {
-                            if RefToStyle::is_tag(name) {
+                            if Self::is_tag(name) {
+                                panic!(format!("Nested paragraph not supported"));
+                            } else if RefToStyle::is_tag(name) {
                                 self.style.parse(source, attributes);
                             } else if Text::is_tag(name) {
                                 self.text.parse(source);
@@ -129,6 +131,8 @@ mod sax_docx {
 
                 while let Some(event) = source.next() {
                     match event.unwrap() {
+                        XmlEvent::StartElement { ref name, .. }
+                        if Self::is_tag(name) => panic!(format!("Nested style definition not supported")),
                         XmlEvent::EndElement { ref name, .. }
                         if Self::is_tag(name) => break,
                         _ => ()
@@ -161,6 +165,8 @@ mod sax_docx {
             where T: Iterator<Item=Result<XmlEvent, xml::reader::Error>> {
                 while let Some(event) = source.next() {
                     match event.unwrap() {
+                        XmlEvent::StartElement { ref name, .. }
+                        if Self::is_tag(name) => panic!(format!("Nested text not supported")),
                         XmlEvent::CData(ref cdata) => self.content.push_str(cdata),
                         XmlEvent::Characters(ref chars) => self.content.push_str(chars),
                         XmlEvent::Whitespace(ref whsp) => self.content.push_str(whsp),
