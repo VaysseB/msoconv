@@ -21,35 +21,42 @@ pub trait WordReader {
 mod sax_docx {
     use mso_doc::*;
 
+    trait UtilsName {
+        fn is_tag(&self, key: &str) -> bool;
+    }
+
+    impl UtilsName for OwnedName {
+        fn is_tag(&self, key: &str) -> bool {
+            if let Some(i) = key.find(":") {
+                let (namespace, tail) = key.split_at(i);
+                let (_, key) = tail.split_at(1);
+
+                if let Some(ref p) = self.prefix {
+                    p.as_str() == namespace && self.local_name.as_str() == key
+                } else {
+                    false
+                }
+            } else {
+                if let None = self.prefix {
+                    self.local_name.as_str() == key
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     trait UtilsAttributes {
         fn value(&self, key: &str) -> String;
     }
 
     impl UtilsAttributes for Vec<OwnedAttribute> {
         fn value(&self, key: &str) -> String {
-            if let Some(i) = key.find(":") {
-                let (namespace, tail) = key.split_at(i);
-                let (_, key) = tail.split_at(1);
-                let predicate = |name: &OwnedName| {
-                    if let Some(ref p) = name.prefix {
-                        p.as_str() == namespace && name.local_name.as_str() == key
-                    } else {
-                        false
-                    }
-                };
-
-                self.iter().skip_while(|attr| !predicate(&attr.name))
-                    .next()
-                    .map(|attr| attr.value.to_owned())
-                    .unwrap_or_else(String::new)
-            } else {
-                let predicate = |name: &OwnedName| name.local_name.as_str() == key;
-
-                self.iter().skip_while(|attr| !predicate(&attr.name))
-                    .next()
-                    .map(|attr| attr.value.to_owned())
-                    .unwrap_or_else(String::new)
-            }
+            self.iter()
+                .skip_while(|attr| !attr.name.is_tag(key))
+                .next()
+                .map(|attr| attr.value.to_owned())
+                .unwrap_or_else(String::new)
         }
     }
 
