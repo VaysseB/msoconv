@@ -12,15 +12,51 @@ use self::xml::attribute::OwnedAttribute;
 
 pub trait WordReader {
     fn paragraph_row(&mut self, text: &String, style: &String);
+
+    fn table_header(&mut self, columns: &Vec<String>, style: &String);
+    //    fn table_row(&mut self, columns: &Vec<String>, style: &String);
 }
 
 
 mod sax_docx {
     use mso_doc::*;
 
+    trait UtilsAttributes {
+        fn value(&self, key: &str) -> String;
+    }
+
+    impl UtilsAttributes for Vec<OwnedAttribute> {
+        fn value(&self, key: &str) -> String {
+            if let Some(i) = key.find(":") {
+                let (namespace, tail) = key.split_at(i);
+                let (_, key) = tail.split_at(1);
+                let predicate = |name: &OwnedName| {
+                    if let Some(ref p) = name.prefix {
+                        p.as_str() == namespace && name.local_name.as_str() == key
+                    } else {
+                        false
+                    }
+                };
+
+                self.iter().skip_while(|attr| !predicate(&attr.name))
+                    .next()
+                    .map(|attr| attr.value.to_owned())
+                    .unwrap_or_else(String::new)
+            } else {
+                let predicate = |name: &OwnedName| name.local_name.as_str() == key;
+
+                self.iter().skip_while(|attr| !predicate(&attr.name))
+                    .next()
+                    .map(|attr| attr.value.to_owned())
+                    .unwrap_or_else(String::new)
+            }
+        }
+    }
+
     #[derive(Default)]
     pub struct DocumentRoot {
-        paragraph: Paragraph
+        paragraph: Paragraph,
+        //table: Table
     }
 
     impl DocumentRoot {
@@ -31,21 +67,15 @@ mod sax_docx {
                         XmlEvent::StartElement { ref name, .. } => {
                             if Paragraph::is_tag(name) {
                                 self.paragraph.parse(source);
-                                self.send_paragraph(reader);
-                            }
+                                self.paragraph.send(reader);
+                                //} else if Table::is_tag(name) {
+                                //self.table.parse_send(source, reader);
+                        }
                         },
                         _ => ()
                     }
                 }
             }
-
-        fn send_paragraph(&mut self, reader: &mut WordReader) {
-            reader.paragraph_row(
-                &self.paragraph.text.content,
-                &self.paragraph.style.name
-                );
-            self.paragraph.clear();
-        }
     }
 
     // Paragraph
@@ -67,7 +97,8 @@ mod sax_docx {
             }
         }
 
-        fn clear(&mut self) {
+        fn send(&mut self, reader: &mut WordReader) {
+            reader.paragraph_row(&self.text.content, &self.style.name);
             self.style.clear();
             self.text.clear();
         }
@@ -109,25 +140,13 @@ mod sax_docx {
             }
         }
 
-        fn is_style_name_key(name: &OwnedName) -> bool {
-            if let Some(ref p) = name.prefix {
-                p.as_str() == "w" && name.local_name == "val"
-            } else {
-                false
-            }
-        }
-
         fn clear(&mut self) {
             self.name.clear();
         }
 
         pub fn parse<T>(&mut self, source: &mut T, attributes: &Vec<OwnedAttribute>)
             where T: Iterator<Item=Result<XmlEvent, xml::reader::Error>> {
-                self.name = attributes.iter()
-                    .skip_while(|attr| !Self::is_style_name_key(&attr.name))
-                    .next()
-                    .map(|attr| attr.value.to_owned())
-                    .unwrap_or_else(String::new);
+                self.name = attributes.value("w:val");
 
                 while let Some(event) = source.next() {
                     match event.unwrap() {
@@ -177,6 +196,43 @@ mod sax_docx {
                 }
             }
     }
+
+    /*    // Table*/
+    //// <w:tbl>
+    ////   - row
+    //#[derive(Default)]
+    //struct Table {
+    //row: TableRow,
+    //}
+
+    //impl Table {
+    //fn is_tag(name: &OwnedName) -> bool {
+    //if let Some(ref p) = name.prefix {
+    //p.as_str() == "w" && name.local_name == "tbl"
+    //} else {
+    //false
+    //}
+    //}
+
+    //pub fn parse_send<T>(&mut self, source: &mut T, reader: &WordReader)
+    //where T: Iterator<Item=Result<XmlEvent, xml::reader::Error>> {
+    //while let Some(event) = source.next() {
+    //match event.unwrap() {
+    //XmlEvent::StartElement { ref name, .. } => {
+    //if Self::is_tag(name) {
+    //panic!(format!("Nested table not supported"));
+    //} else if Text::is_tag(name) {
+    //self.row.parse(source);
+    //self.row.send(reader);
+    //}
+    //},
+    //XmlEvent::EndElement { ref name, .. }
+    //if Self::is_tag(name) => break,
+    //_ => ()
+    //}
+    //}
+    //}
+    /*}*/
 }
 
 
